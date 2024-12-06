@@ -11,7 +11,7 @@ vector<Schedule *> schedules;
 CourseDatabase courseDb; // Course database object
 
 // Member functions of the Schedule struct
-Schedule::Schedule(int year, const string &semester, const string &department, int totalCredits)
+Schedule::Schedule(int year, const string &semester, const string &department, int totalCredits = 0)
     : year(year), semester(semester), department(department), totalCredits(totalCredits)
 {
     random_device rd;
@@ -46,9 +46,8 @@ void Schedule::removeDay(int index)
 
 void Schedule::display()
 {
-    cout << "===========================================================\n";
-    cout << "      Mon        |        Tue       |        Wed       |        Thu       |        Fri       |        Sat "
-            "      |        Sun "
+    cout << "=====================================================================================================================================\n";
+    cout << "      Mon        |        Tue       |        Wed       |        Thu       |        Fri       |        Sat       |        Sun "
          << endl;
     vector<vector<string>> scheduleTable(7);
     for (const auto &course : courses)
@@ -64,13 +63,13 @@ void Schedule::display()
             cout << course << "    | ";
         }
     }
-    cout << "\n===========================================================" << endl;
+    cout << "\n=======================================================================================================" << endl;
 }
 
 // Function definitions
 void createSchedule(User &currentUser, vector<Schedule *> &schedules)
 {
-    int year, totalCredits;
+    int year = 0, totalCredits = 0;
     string semester;
     string department;
     vector<string> selectedCourses;
@@ -91,44 +90,47 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
     }
 
     // Select year
-    system("cls");
-    set<int> years;
-    for (const auto &course : courses)
-    {
-        years.insert(course.get_year());
-    }
-
-    cout << "Select a year: " << endl;
-    int idx = 1;
-    vector<int> yearList(years.begin(), years.end());
-    for (const auto &yr : yearList)
-    {
-        cout << idx++ << ". " << yr << endl;
-    }
-    int yearChoice;
-    cin >> yearChoice;
+    cout << "Enter the year for the schedule (e.g., 2023, 2024): ";
+    cin >> year;
     cin.ignore(); // Clear input buffer
-    year = yearList[yearChoice - 1];
+
+    system("cls");
+    // Select grade level based on user setup
+    cout << "You are currently in year " << currentUser.year << " (as set in User Setup). Press Enter to continue...";
+    cin.ignore();
 
     system("cls");
     // Select semester
-    set<string> semesters;
-    for (const auto &course : courses)
-    {
-        semesters.insert(encode_semester(course.get_semester()));
-    }
-
-    cout << "Select a semester: " << endl;
-    idx = 1;
-    vector<string> semesterList(semesters.begin(), semesters.end());
-    for (const auto &sem : semesterList)
-    {
-        cout << idx++ << ". " << sem << endl;
-    }
     int semesterChoice;
-    cin >> semesterChoice;
-    cin.ignore(); // Clear input buffer
-    semester = semesterList[semesterChoice - 1];
+    while (true)
+    {
+        cout << "Select a semester:\n1. Spring\n2. Summer\n3. Fall\n4. Winter\nSelect: ";
+        cin >> semesterChoice;
+        cin.ignore(); // Clear input buffer
+        if (semesterChoice >= 1 && semesterChoice <= 4)
+        {
+            break;
+        }
+        else
+        {
+            cout << "Invalid choice. Please select a number between 1 and 4." << endl;
+        }
+    }
+    switch (semesterChoice)
+    {
+    case 1:
+        semester = "Spring";
+        break;
+    case 2:
+        semester = "Summer";
+        break;
+    case 3:
+        semester = "Fall";
+        break;
+    case 4:
+        semester = "Winter";
+        break;
+    }
 
     system("cls");
     // Select department
@@ -147,16 +149,27 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
         return;
     }
 
-    cout << "Select a department: " << endl;
-    idx = 1;
-    vector<string> departmentList(departments.begin(), departments.end());
-    for (const auto &dept : departmentList)
-    {
-        cout << idx++ << ". " << dept << endl;
-    }
     int departmentChoice;
-    cin >> departmentChoice;
-    cin.ignore(); // Clear input buffer
+    vector<string> departmentList(departments.begin(), departments.end());
+    while (true)
+    {
+        cout << "Select a department: " << endl;
+        int idx = 1;
+        for (const auto &dept : departmentList)
+        {
+            cout << idx++ << ". ComputerScience" << endl; // Display as ComputerScience
+        }
+        cin >> departmentChoice;
+        cin.ignore(); // Clear input buffer
+        if (departmentChoice >= 1 && departmentChoice <= departmentList.size())
+        {
+            break;
+        }
+        else
+        {
+            cout << "Invalid choice. Please select a valid department number." << endl;
+        }
+    }
     department = departmentList[departmentChoice - 1];
 
     system("cls");
@@ -183,7 +196,7 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
     {
         system("cls");
         cout << "Select a course category: " << endl;
-        idx = 1;
+        int idx = 1;
         for (const auto &category : courseCategories)
         {
             cout << idx++ << ". " << category << endl;
@@ -195,6 +208,11 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
         if (categoryChoice == 15)
         {
             break;
+        }
+        if (categoryChoice < 1 || categoryChoice > 14)
+        {
+            cout << "Invalid choice. Please select a number between 1 and 15." << endl;
+            continue;
         }
 
         CourseType selectedCategory = static_cast<CourseType>(categoryChoice - 1);
@@ -219,8 +237,19 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
         }
 
         int courseChoice;
-        cin >> courseChoice;
-        cin.ignore(); // Clear input buffer
+        while (true)
+        {
+            cin >> courseChoice;
+            cin.ignore(); // Clear input buffer
+            if (courseChoice >= 1 && courseChoice <= categoryCourses.size())
+            {
+                break;
+            }
+            else
+            {
+                cout << "Invalid choice. Please select a valid course number." << endl;
+            }
+        }
         Course selectedCourse = categoryCourses[courseChoice - 1];
         selectedCourses.push_back(selectedCourse.get_name());
     }
@@ -228,8 +257,19 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
     system("cls");
     // Choose if it's an English A course
     cout << "Is this an English A course? (1: Yes, 0: No): ";
-    cin >> isEnglishA;
-    cin.ignore(); // Clear input buffer
+    while (true)
+    {
+        cin >> isEnglishA;
+        cin.ignore(); // Clear input buffer
+        if (isEnglishA == 0 || isEnglishA == 1)
+        {
+            break;
+        }
+        else
+        {
+            cout << "Invalid choice. Please enter 1 for Yes or 0 for No." << endl;
+        }
+    }
 
     system("cls");
     // Set days to avoid scheduling classes
@@ -250,10 +290,16 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
         {
             avoidDays.push_back(daysOfWeek[dayChoice - 1]);
         }
+        else
+        {
+            cout << "Invalid choice. Please select a valid day number." << endl;
+        }
     }
     cin.ignore(); // Clear input buffer
 
+
     system("cls");
+    cout << "Creating a new schedule...";
     // Create a new schedule with a random ID
     Schedule *schedule = new Schedule(year, semester, department, totalCredits);
     for (const auto &course : selectedCourses)
@@ -263,7 +309,10 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
     schedules.push_back(schedule);
     cout << "Schedule created. ID: " << schedule->id << endl;
     schedule->display();
+    cout << "Press Enter to return to the main menu...";
+    cin.ignore();
 }
+
 
 void searchAndModifySchedule()
 {
@@ -275,17 +324,41 @@ void setupUser(User &user)
     system("cls");
     cout << "Enter user name: ";
     cin >> user.name;
-    cout << "Enter user year: ";
-    cin >> user.year;
-    cout << "Enter user student ID: ";
-    cin >> user.student_id;
+
+    while (true)
+    {
+        cout << "Enter user year (1-4): ";
+        cin >> user.year;
+        if (user.year >= 1 && user.year <= 4)
+        {
+            break;
+        }
+        else
+        {
+            cout << "Invalid input. Please enter a number between 1 and 4." << endl;
+        }
+    }
+
+    while (true)
+    {
+        cout << "Enter user student ID (8-digit number): ";
+        cin >> user.student_id;
+        if (user.student_id >= 10000000 && user.student_id <= 99999999)
+        {
+            break;
+        }
+        else
+        {
+            cout << "Invalid input. Please enter an 8-digit number." << endl;
+        }
+    }
     cout << "Enter user department: ";
     cin >> user.department;
     cin.ignore(); // Clear input buffer
 }
-
 void mainMenu()
 {
+    system("cls");
     int choice;
 
     while (true)
