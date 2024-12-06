@@ -13,7 +13,7 @@ file(GLOB SOURCE_FILES
     src/*/*.cpp
 )
 
-add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+add_executable(${PROJECT_NAME} ${SOURCE_FILES} "include/display.h")
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 find_program(CLANG_FORMAT "clang-format")

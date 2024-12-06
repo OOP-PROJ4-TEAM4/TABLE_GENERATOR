@@ -1,66 +1,82 @@
-#include <iostream>
-#include <vector>
-#include <string>
-#include <algorithm>
 #include "table.h"
 #include "parser.h"
+#include <algorithm>
+#include <iostream>
+#include <string>
+#include <vector>
 
 using namespace std;
 
-int Table::get_total_grade() {
+int Table::get_total_grade()
+{
     int total_grade = 0;
     vector<Course>::iterator p;
 
-    for (p = courses.begin(); p != courses.end(); ++p) {   
+    for (p = courses.begin(); p != courses.end(); ++p)
+    {
         total_grade += p->get_grade();
     }
 
     return total_grade;
 }
 
-void Table::remove_course(Course &course) {
+void Table::remove_course(Course &course)
+{
     auto toRemove = find(courses.begin(), courses.end(), course);
-    if (toRemove != courses.end()) {
+    if (toRemove != courses.end())
+    {
         courses.erase(toRemove);
-    } else {
+    }
+    else
+    {
         cout << "There is no course" << endl;
     }
 }
 
-bool Table::insert_course(Course &course) {
-    try {
+bool Table::insert_course(Course &course)
+{
+    try
+    {
         courses.push_back(course);
     }
-    catch (const exception &e) {
-        return false;
-    }
-    return true;   
-}
-
-vector<Course> Table::get_course() const {
-    return courses;
-}
-
-bool Table::is_satisfy(TableQuery tableQuery) const {
-    if (semester != tableQuery.semester) {
-        return false;
-    }
-
-    if (year != stoi(tableQuery.year)) {
-        return false;
-    }
-
-    if (name != tableQuery.name) {
-        return false;    
-    }
-
-    if (user_id != stoi(tableQuery.user_id)) {
+    catch (const exception &e)
+    {
         return false;
     }
     return true;
 }
 
-string Table::encode(){
+vector<Course> Table::get_course() const
+{
+    return courses;
+}
+
+bool Table::is_satisfy(TableQuery tableQuery) const
+{
+    if (semester != tableQuery.semester)
+    {
+        return false;
+    }
+
+    if (year != stoi(tableQuery.year))
+    {
+        return false;
+    }
+
+    if (name != tableQuery.name)
+    {
+        return false;
+    }
+
+    if (user_id != stoi(tableQuery.user_id))
+    {
+        return false;
+    }
+    return true;
+}
+
+string Table::encode()
+{
     string raw_value;
     raw_value.append("<Table>");
     raw_value.append("<id>" + to_string(id) + "</id>");
@@ -69,45 +85,60 @@ string Table::encode(){
     raw_value.append("<semester>" + encode_semester(semester) + "</semester>");
     raw_value.append("<name>" + name + "</name>");
 
-    for (auto course : courses) {
-        raw_value.append("<course>" + course.encode() + "</course>");
+    for (auto course : courses)
+    {
+        raw_value.append(course.encode());
     }
     raw_value.append("</Table>");
     return raw_value;
 }
 
-Table::Table(const string &str){
+Table::Table(const string &str)
+{
     ParseResult result;
     ParseResult course_result;
-    auto it = str.begin();
-    while (it != str.end()) {
+    string::const_iterator it = str.begin();
+    while (it != str.end())
+    {
         result = parse_tag(it, str.end());
-        if (result.is_success) {
-            if (result.tag == "id") {
+        if (result.is_success)
+        {
+            if (result.tag == "id")
+            {
                 id = stoi(result.value);
             }
-            else if (result.tag == "name") {
-                name = stoi(result.value);
+            else if (result.tag == "name")
+            {
+                name = result.value;
             }
-            else if (result.tag == "user_id") {
+            else if (result.tag == "user_id")
+            {
                 user_id = stoi(result.value);
             }
-            else if (result.tag == "year") {
+            else if (result.tag == "year")
+            {
                 year = stoi(result.value);
             }
-            else if (result.tag == "Semester") {
+            else if (result.tag == "semester")
+            {
                 semester = decode_semester(result.value);
             }
-            else if (result.tag == "Course") {
+            else if (result.tag == "course")
+            {
                 Course course(result.value);
                 courses.push_back(course);
+            }
+            else if (it + 1 == str.end())
+            {
+                break;
             }
         }
     }
 }
 
 // AllArgsConstructor
-Table::Table(int iid, int iuser_id, std::string iname, std::vector<Course> icourses, int iyear, Semester isemester) {
+Table::Table(int iid, int iuser_id, std::string iname, std::vector<Course> icourses, int iyear, Semester isemester)
+{
     id = iid;
     user_id = iuser_id;
     name = iname;
@@ -116,26 +147,33 @@ Table::Table(int iid, int iuser_id, std::string iname, std::vector<Course> icour
     semester = isemester;
 }
 
-Table::~Table() { }
+Table::~Table()
+{
+}
 
 // getter
 
-Semester Table::get_semester() const {
+Semester Table::get_semester() const
+{
     return semester;
 }
 
-int Table::get_year() const {
+int Table::get_year() const
+{
     return year;
 }
 
-string Table::get_name() const {
+string Table::get_name() const
+{
     return name;
 }
 
-int Table::get_user_id() const {
+int Table::get_user_id() const
+{
     return user_id;
 }
 
-int Table::get_id() const {
+int Table::get_id() const
+{
     return id;
 }

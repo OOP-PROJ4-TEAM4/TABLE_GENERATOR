@@ -20,7 +20,7 @@ std::size_t DateIndexKeyHash::operator()(const DateIndexKey &key) const
            (std::hash<std::string>()(encode_weekday(key.weekday)) << 2) ^ (std::hash<int>()(key.time) << 3);
 }
 
-std::string convert_wstr_to_str(std::wstring wstr)
+std::string convert_wstr_to_str(std::wstring wstr) // wstring타입을 utf-8 string으로 변환합니다.
 {
     const size_t size = wstr.size() * MB_CUR_MAX + 1;
     char *new_str = new char[size];
@@ -35,7 +35,8 @@ std::string convert_wstr_to_str(std::wstring wstr)
     return str;
 }
 
-std::wstring convert_str_to_wstr(const std::string &str)
+std::wstring convert_str_to_wstr(
+    const std::string &str) // 한글이 포함된경우 유니코드로 변환해 작업해야하므로 wstring타입으로 변환합니다.
 {
     size_t size = str.size() + 1;
     wchar_t *wchars = new wchar_t[size];
@@ -394,7 +395,10 @@ std::vector<Course> CourseDatabase::query(CourseQuery condition) const
     {
         bool is_matched = true;
 
-        if (!condition.departments.empty())
+        if (condition.user_year < course_ptr->get_minimum_year()) // 최소 이수학년 조건에 맞는지 확인
+            is_matched = false;
+
+        if (is_matched && !condition.departments.empty()) // 부서 조건에 맞는지 확ㅇ니
         {
             std::set<Department> departments = course_ptr->get_departments();
             if (!std::includes(condition.departments.begin(), condition.departments.end(), departments.begin(),
@@ -402,11 +406,16 @@ std::vector<Course> CourseDatabase::query(CourseQuery condition) const
                 is_matched = false;
         }
 
-        if (is_matched && !condition.professors.empty())
+        if (is_matched && !condition.professors.empty()) // 교수 조건에 맞는지 확인
         {
-            if (std::find(condition.professors.begin(), condition.professors.end(), course_ptr->get_professor())
-                    ->empty())
-                is_matched = false;
+            is_matched = condition.professors.find(course_ptr->get_professor()) !=
+                         condition.professors.end(); // O(logn) 탐색시간 소요
+        }
+
+        if (is_matched && !condition.types.empty()) // 강의 유형 조건에 맞는지 확인
+        {
+            is_matched =
+                condition.types.find(course_ptr->get_type()) != condition.types.end(); // O(logn)의 탐색시간 소요
         }
 
         if (is_matched)

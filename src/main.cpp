@@ -1,15 +1,11 @@
-#include "course_db.h"
 #include "display.h"
-//#include "schedule_management.h"
-#include "table_db.h"
-#include <conio.h>
 #include <iostream>
-#include <string>
 
 using namespace std;
 
 int main()
 {
+    // 프로그램 시작 시 메인 메뉴 호출
     mainMenu();
     return 0;
 }

@@ -1,1091 +1,320 @@
 #include "display.h"
-#include "schedule_management.h"
-#include "user.h"
-#include "course.h"
-#include "table.h"
-#include "table_db.h"
 #include "course_db.h"
-#include "parser.h"
 #include <algorithm>
-#include <conio.h>
-#include <cstdlib>
-#include <ctime>
-#include <iomanip>
 #include <iostream>
-#include <stdexcept>
-#include <string>
-#include <vector>
 
 using namespace std;
-TableDatabase tableDatabase;
 
-User current_user;
+// Global variable definitions
+User currentUser;
+vector<Schedule *> schedules;
+CourseDatabase courseDb; // Course database object
 
-bool checkForEsc()
+// Member functions of the Schedule struct
+Schedule::Schedule(int year, const string &semester, const string &department, int totalCredits)
+    : year(year), semester(semester), department(department), totalCredits(totalCredits)
 {
-    if (_kbhit())
-    {
-        char key = _getch();
-        if (key == 27) 
-        {
-            return true;
-        }
-    }
-    return false;
+    random_device rd;
+    id = rd() % 99 + 1;
 }
 
-void waitForEnterOrEsc()
+void Schedule::addCourse(const string &course)
 {
-    cout << "\n(Press Enter to complete or press ESC to go back.)" << endl;
-    while (true)
+    courses.push_back(course);
+}
+
+void Schedule::addDay(const string &day)
+{
+    days.push_back(day);
+}
+
+void Schedule::removeCourse(int index)
+{
+    if (index >= 0 && index < courses.size())
     {
-        if (_kbhit())
-        {
-            char key = _getch();
-            if (key == 13)
-            {
-                break;
-            }
-            else if (key == 27)
-            {
-                throw runtime_error(" Back ");
-            }
-        }
+        courses.erase(courses.begin() + index);
     }
 }
-void mainMenu()
+
+void Schedule::removeDay(int index)
 {
-    int selectedOption = 1;
+    if (index >= 0 && index < days.size())
+    {
+        days.erase(days.begin() + index);
+    }
+}
+
+void Schedule::display()
+{
+    cout << "===========================================================\n";
+    cout << "      Mon        |        Tue       |        Wed       |        Thu       |        Fri       |        Sat "
+            "      |        Sun "
+         << endl;
+    vector<vector<string>> scheduleTable(7);
+    for (const auto &course : courses)
+    {
+        // Add courses by day (in actual implementation, proper day info is needed)
+        scheduleTable[0].push_back(course); // Assigned to Monday as an example
+    }
+    for (int i = 0; i < 7; ++i)
+    {
+        cout << "\n";
+        for (const auto &course : scheduleTable[i])
+        {
+            cout << course << "    | ";
+        }
+    }
+    cout << "\n===========================================================" << endl;
+}
+
+// Function definitions
+void createSchedule(User &currentUser, vector<Schedule *> &schedules)
+{
+    int year, totalCredits;
+    string semester;
+    string department;
+    vector<string> selectedCourses;
+    bool isEnglishA;
+    vector<string> avoidDays;
+    string day;
+
+    system("cls");
+    // Load course data from the database
+    courseDb.load();
+    vector<Course> courses = courseDb.query({});
+
+    // Check if courses are loaded properly
+    if (courses.empty())
+    {
+        cout << "No courses found in the database. Please check the database." << endl;
+        return;
+    }
+
+    // Select year
+    system("cls");
+    set<int> years;
+    for (const auto &course : courses)
+    {
+        years.insert(course.get_year());
+    }
+
+    cout << "Select a year: " << endl;
+    int idx = 1;
+    vector<int> yearList(years.begin(), years.end());
+    for (const auto &yr : yearList)
+    {
+        cout << idx++ << ". " << yr << endl;
+    }
+    int yearChoice;
+    cin >> yearChoice;
+    cin.ignore(); // Clear input buffer
+    year = yearList[yearChoice - 1];
+
+    system("cls");
+    // Select semester
+    set<string> semesters;
+    for (const auto &course : courses)
+    {
+        semesters.insert(encode_semester(course.get_semester()));
+    }
+
+    cout << "Select a semester: " << endl;
+    idx = 1;
+    vector<string> semesterList(semesters.begin(), semesters.end());
+    for (const auto &sem : semesterList)
+    {
+        cout << idx++ << ". " << sem << endl;
+    }
+    int semesterChoice;
+    cin >> semesterChoice;
+    cin.ignore(); // Clear input buffer
+    semester = semesterList[semesterChoice - 1];
+
+    system("cls");
+    // Select department
+    set<string> departments;
+    for (const auto &course : courses)
+    {
+        for (const auto &dept : course.get_departments())
+        {
+            departments.insert(static_cast<string>(encode_department(dept)));
+        }
+    }
+
+    if (departments.empty())
+    {
+        cout << "No departments found. Please check the course data." << endl;
+        return;
+    }
+
+    cout << "Select a department: " << endl;
+    idx = 1;
+    vector<string> departmentList(departments.begin(), departments.end());
+    for (const auto &dept : departmentList)
+    {
+        cout << idx++ << ". " << dept << endl;
+    }
+    int departmentChoice;
+    cin >> departmentChoice;
+    cin.ignore(); // Clear input buffer
+    department = departmentList[departmentChoice - 1];
+
+    system("cls");
+    // Select course category
+    vector<string> courseCategories = {
+        "General_Education",     // 공통교양
+        "CoreCommunication",     // 핵심-소통
+        "CoreCreativity",        // 핵심-창의
+        "CoreChallenge",         // 핵심-도전
+        "CoreConvergence",       // 핵심-융합
+        "CoreTrust",             // 핵심-신뢰
+        "ElectiveCommunication", // 선택-소통
+        "ElectiveCreativity",    // 선택-창의
+        "ElectiveChallenge",     // 선택-도전
+        "ElectiveConvergence",   // 선택-융합
+        "ElectiveTrust",         // 선택-신뢰
+        "Major",                 // 전공
+        "MajorRequired",         // 전공필수
+        "MajorFundamental",      // 전공기초
+        "Next Step"              // 다음 단계
+    };
+
     while (true)
     {
         system("cls");
-        cout << "\n==================================================================================" << endl;
-        cout << "[Chung-Ang University Schedule Management System]" << endl;
-        cout << "==================================================================================" << endl;
-        string options[] = {" 1. User Settings", " 2. Schedule", " 3. Exit"};
-        for (int i = 0; i < 3; ++i)
+        cout << "Select a course category: " << endl;
+        idx = 1;
+        for (const auto &category : courseCategories)
         {
-            if (i + 1 == selectedOption)
-            {
-                cout << "> " << options[i] << endl;
-            }
-            else
-            {
-                cout << "  " << options[i] << endl;
-            }
+            cout << idx++ << ". " << category << endl;
         }
-        cout << "==================================================================================" << endl;
+        int categoryChoice;
+        cin >> categoryChoice;
+        cin.ignore(); // Clear input buffer
 
-        char key = _getch();
-        if (key == 13)
+        if (categoryChoice == 15)
         {
-            switch (selectedOption)
-            {
-            case 1:
-                userSettings();
-                break;
-            case 2:
-                displayScheduleMenu();
-                break;
-            case 3:
-                cout << "Exiting the program." << endl;
-                return;
-            }
+            break;
         }
-        else if (key == 72)
-        {
-            selectedOption = (selectedOption == 1) ? 3 : selectedOption - 1;
-        }
-        else if (key == 80)
-        {
-            selectedOption = (selectedOption == 3) ? 1 : selectedOption + 1;
-        }
-    }
-}
 
-
-void userSettings()
-{
-    try
-    {
+        CourseType selectedCategory = static_cast<CourseType>(categoryChoice - 1);
         system("cls");
-        cout << "\nUser Settings" << endl;
-        cout << "Name: ";
-        cin >> current_user.name;
-        while (current_user.name.empty())
+        // Select course
+        cout << "Select a course: " << endl;
+        vector<Course> categoryCourses;
+        for (const auto &course : courses)
         {
-            cout << "The name is invalid. Please re-enter it: ";
-            cin >> current_user.name;
+            if (course.get_type() == selectedCategory &&
+                encode_department(*course.get_departments().begin()) == department)
+            {
+                categoryCourses.push_back(course);
+                cout << categoryCourses.size() << ". " << course.get_name() << endl;
+            }
         }
-        cout << "Student ID: ";
-        cin >> current_user.id;
-        while (cin.fail() || to_string(current_user.id).length() != 8)
+
+        if (categoryCourses.empty())
         {
-            cin.clear();
-            cin.ignore(1000, '\n');
-            cout << "The student ID is invalid. Please enter it in an 8-digit numeric format.: ";
-            cin >> current_user.id;
+            cout << "No courses found for the selected category and department." << endl;
+            continue;
         }
-        cout << "Year (1-4): ";
-        cin >> current_user.year;
-        while (cin.fail() || current_user.year < 1 || current_user.year > 4)
-        {
-            cin.clear();
-            cin.ignore(1000, '\n');
-            cout << "Please enter the year as a number between 1 and 4: ";
-            cin >> current_user.year;
-        }
-        cout << "Department: ";
-        cin >> current_user.department;
-        vector<string> validDepartments = {"Software", "Other Departments"};
-        while (find(validDepartments.begin(), validDepartments.end(), current_user.department) ==
-               validDepartments.end())
-        {
-            cout << "The department name is invalid. Please re-enter it.: ";
-            cin >> current_user.department;
-        }
-        cout << "User information has been saved.\n" << endl;
-        waitForEnterOrEsc();
+
+        int courseChoice;
+        cin >> courseChoice;
+        cin.ignore(); // Clear input buffer
+        Course selectedCourse = categoryCourses[courseChoice - 1];
+        selectedCourses.push_back(selectedCourse.get_name());
     }
-    catch (runtime_error &)
+
+    system("cls");
+    // Choose if it's an English A course
+    cout << "Is this an English A course? (1: Yes, 0: No): ";
+    cin >> isEnglishA;
+    cin.ignore(); // Clear input buffer
+
+    system("cls");
+    // Set days to avoid scheduling classes
+    cout << "Select days to avoid: " << endl;
+    vector<string> daysOfWeek = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+    for (int i = 0; i < daysOfWeek.size(); ++i)
     {
-        cout << "User settings have been canceled.\n" << endl;
+        cout << i + 1 << ". " << daysOfWeek[i] << endl;
     }
+    cout << "Select days to avoid (enter numbers, separated by space, and type 0 to finish): ";
+    while (true)
+    {
+        int dayChoice;
+        cin >> dayChoice;
+        if (dayChoice == 0)
+            break;
+        if (dayChoice >= 1 && dayChoice <= daysOfWeek.size())
+        {
+            avoidDays.push_back(daysOfWeek[dayChoice - 1]);
+        }
+    }
+    cin.ignore(); // Clear input buffer
+
+    system("cls");
+    // Create a new schedule with a random ID
+    Schedule *schedule = new Schedule(year, semester, department, totalCredits);
+    for (const auto &course : selectedCourses)
+    {
+        schedule->addCourse(course);
+    }
+    schedules.push_back(schedule);
+    cout << "Schedule created. ID: " << schedule->id << endl;
+    schedule->display();
 }
 
-void displayScheduleTable(const Table &table)
+void searchAndModifySchedule()
+{
+    cout << "Schedule search and modification feature is not yet implemented." << endl;
+}
+
+void setupUser(User &user)
 {
     system("cls");
-    cout << "\n==================================================================================" << endl;
-    cout << "Period |      Mon      |      Tue      |      Wed      |       Thur      |      Fri      |" << endl;
-    cout << "====================================================================================" << endl;
-    for (int i = 1; i <= 12; ++i)
-    {
-        cout << i << "Period | ";
-        for (const Weekday &day : {Weekday::Mon, Weekday::Tue, Weekday::Wed, Weekday::Thu, Weekday::Fri})
-        {
-            bool slotFound = false;
-            for (const auto &course : table.get_course())
-            {
-                for (const auto &time : course.get_times())
-                {
-                    if (time.weekday == day && time.time == i)
-                    {
-                        cout << left << setw(12) << (course.get_name() + "/" + course.get_professor()) << " | ";
-                        slotFound = true;
-                        break;
-                    }
-                }
-                if (slotFound)
-                    break;
-            }
-            if (!slotFound)
-            {
-                cout << left << setw(12) << "" << " | ";
-            }
-        }
-        cout << "\n------------------------------------------------------------------------------------" << endl;
-    }
+    cout << "Enter user name: ";
+    cin >> user.name;
+    cout << "Enter user year: ";
+    cin >> user.year;
+    cout << "Enter user student ID: ";
+    cin >> user.student_id;
+    cout << "Enter user department: ";
+    cin >> user.department;
+    cin.ignore(); // Clear input buffer
 }
 
-void displayScheduleMenu()
+void mainMenu()
 {
-    vector<string> options = {"1. Create Schedule", "2. Search and Edit Schedule", "3. Return to Main Menu"};
-    int selectedOption = 1;
+    int choice;
+
     while (true)
     {
         system("cls");
-        for (int i = 0; i < options.size(); ++i)
-        {
-            if (i + 1 == selectedOption)
-            {
-                cout << "> " << options[i] << endl;
-            }
-            else
-            {
-                cout << "  " << options[i] << endl;
-            }
-        }
-        char key = _getch();
-        if (key == 13)
-        {
-            switch (selectedOption)
-            {
-            case 1:
-                generateSchedule();
-                break;
-            case 2:
-                modifySchedule();
-                break;
-            case 3:
-                return;
-            }
-        }
-        else if (key == 72)
-        {
-            selectedOption = (selectedOption == 1) ? options.size() : selectedOption - 1;
-        }
-        else if (key == 80)
-        {
-            selectedOption = (selectedOption == options.size()) ? 1 : selectedOption + 1;
-        }
-    }
-}
+        cout << "[MainMenu]\n1. User Setup\n2. Create Schedule\n3. Search and Modify Schedule\n4. Exit\nSelect: ";
+        cin >> choice;
+        cin.ignore(); // Clear input buffer
 
-
-void generateSchedule()
-{
-    srand(time(0));
-    int currentStep = 1;
-    int totalSteps = 10;
-    while (currentStep <= totalSteps)
-    {
-        try
-        {
-            system("cls");
-            cout << "\nSchedule Creation Step " << currentStep << "/" << totalSteps << endl;
-            switch (currentStep)
-            {
-            case 1: {
-                cout << "Please enter the year for the schedule (e.g., 2023, 2024): ";
-                string year;
-                cin >> year;
-                while (cin.fail() || year.length() != 4 || !isdigit(year[0]))
-                {
-                    cin.clear();
-                    cin.ignore(1000, '\n');
-                    cout << "Invalid input. Please enter a 4-digit number (e.g., 2023, 2024): ";
-                    cin >> year;
-                }
-            }
-            break;
-            case 2: {
-                cout << "\nPlease select your year:\n1. 1st Year\n2. 2nd Year\n3. 3rd Year\n4. 4th Year\n> ";
-                int yearOption;
-                cin >> yearOption;
-                while (cin.fail() || yearOption < 1 || yearOption > 4)
-                {
-                    cin.clear();
-                    cin.ignore(1000, '\n');
-                    cout << "Invalid input. Please select a number between 1 and 4: ";
-                    cin >> yearOption;
-                }
-            }
-            break;
-            case 3: {
-                cout << "\nPlease select a semester:\n1. Spring (1st Semester)\n2. Summer (Seasonal Semester)\n3. Fall "
-                        "(2nd Semester)\n4. Winter (Seasonal Semester)\n> ";
-                int semester;
-                cin >> semester;
-                while (cin.fail() || semester < 1 || semester > 4)
-                {
-                    cin.clear();
-                    cin.ignore(1000, '\n');
-                    cout << "Invalid input. Please select a number between 1 and 4: ";
-                    cin >> semester;
-                }
-            }
-            break;
-            case 4: {
-                cout << "\nPlease select a department:\n1. Software Department\n2. Other Department\n> ";
-                int department;
-                cin >> department;
-                while (cin.fail() || department < 1 || department > 2)
-                {
-                    cin.clear();
-                    cin.ignore(1000, '\n');
-                    cout << "Invalid input. Please select either 1 or 2: ";
-                    cin >> department;
-                }
-            }
-            break;
-            case 5: {
-                cout << "\nPlease enter the number of credits you will take this semester (maximum 24 credits): ";
-                int maxCredits;
-                cin >> maxCredits;
-                while (cin.fail() || maxCredits < 1 || maxCredits > 24)
-                {
-                    cin.clear();
-                    cin.ignore(1000, '\n');
-                    cout << "Invalid input. Please enter a number of credits between 1 and 24: ";
-                    cin >> maxCredits;
-                }
-            }
-            break;
-            case 6: {
-                cout << "\nPlease select a professor priority:\n1. Professor A\n2. Professor B\n3. Professor C\n> ";
-                int professor;
-                cin >> professor;
-                while (cin.fail() || professor < 1 || professor > 3)
-                {
-                    cin.clear();
-                    cin.ignore(1000, '\n');
-                    cout << "Invalid input. Please select a number between 1 and 3: ";
-                    cin >> professor;
-                }
-            }
-            break;
-            case 7: {
-                vector<string> categories = {"1. Major", "2. General Education", "3. Next Step"};
-                vector<int> selectedMajorBasicSubjects;          // Major Basics
-                vector<int> selectedMajorSubjects;               // Major
-                vector<int> selectedMajorRequiredSubjects;       // Major Requirements
-                vector<int> selectedGeneralBasicSubjects;        // General Education Basics
-                vector<int> selectedCoreChallengeSubjects;       // Core - Challenge
-                vector<int> selectedCoreCreativitySubjects;      // Core - Creativity
-                vector<int> selectedCoreConvergenceSubjects;     // Core - Convergence
-                vector<int> selectedCoreTrustSubjects;           // Core - Trust
-                vector<int> selectedCoreCommunicationSubjects;   // Core - Communication
-                vector<int> selectedChoiceChallengeSubjects;     // Choice - Challenge
-                vector<int> selectedChoiceCreativitySubjects;    // Choice - Creativity
-                vector<int> selectedChoiceConvergenceSubjects;   // Choice - Convergence
-                vector<int> selectedChoiceTrustSubjects;         // Choice - Trust
-                vector<int> selectedChoiceCommunicationSubjects; // Choice - Communication
-
-                while (true)
-                {
-                    system("cls");
-                    int category;
-                    cout << "\nPlease select a category:\n";
-                    for (int i = 0; i < categories.size(); ++i)
-                    {
-                        cout << i + 1 << ". " << categories[i] << "\n";
-                    }
-                    cout << "> ";
-                    cin >> category;
-                    while (cin.fail() || category < 1 || category > categories.size())
-                    {
-                        cin.clear();
-                        cin.ignore(1000, '\n');
-                        cout << "Invalid input. Please select a number between 1 and " << categories.size() << ": ";
-                        cin >> category;
-                    }
-                    if (category == 1)
-                    {
-                        vector<string> majorOptions = {"1. Major Basics", "2. Major Courses", "3. Major Requirements",
-                                                       "4. Go Back"};
-                        while (true)
-                        { 
-                            system("cls");
-                            int majorChoice;
-                            cout << "\nPlease select a major option:\n";
-                            for (int i = 0; i < majorOptions.size(); ++i)
-                            {
-                                cout << i + 1 << ". " << majorOptions[i] << "\n";
-                            }
-                            cout << "> ";
-                            cin >> majorChoice;
-                            while (cin.fail() || majorChoice < 1 || majorChoice > majorOptions.size())
-                            {
-                                cin.clear();
-                                cin.ignore(1000, '\n');
-                                cout << "Invalid input. Please select a number between 1 and " << majorOptions.size()
-                                     << ": ";
-                                cin >> majorChoice;
-                            }
-                            if (majorChoice == 4)
-                            {
-                                break;
-                            }
-                            switch (majorChoice)
-                            {
-                            case 1: {
-                                while (true)
-                                {
-                                    system("cls");
-                                    vector<string> subjects = {"1. Data Structures", "2. Algorithms",
-                                                               "3. Programming Basics", "4. Go Back"};
-                                    cout << "\nPlease select a Major Basics subject (multiple selection allowed, press "
-                                            "ESC to go back):\n";
-                                    for (const auto &subject : subjects)
-                                    {
-                                        cout << subject << "\n";
-                                    }
-                                    cout << "Currently selected subjects: ";
-                                    for (int subject : selectedMajorBasicSubjects)
-                                    {
-                                        cout << subject << " ";
-                                    }
-                                    cout << "\n> ";
-                                    int subjectChoice;
-                                    cin >> subjectChoice;
-
-                                    if (checkForEsc() || subjectChoice == 4)
-                                    {
-                                        break;
-                                    }
-
-                                    if (cin.fail() || subjectChoice < 1 || subjectChoice > subjects.size() - 1)
-                                    {
-                                        cin.clear();
-                                        cin.ignore(1000, '\n');
-                                        cout << "Invalid input. Please try again." << endl;
-                                    }
-                                    else
-                                    {
-                                        if (find(selectedMajorBasicSubjects.begin(), selectedMajorBasicSubjects.end(),
-                                                 subjectChoice) != selectedMajorBasicSubjects.end())
-                                        {
-                                            cout << "Subject already selected." << endl;
-                                        }
-                                        else
-                                        {
-                                            selectedMajorBasicSubjects.push_back(subjectChoice);
-                                        }
-                                    }
-                                }
-                            }
-                            break;
-                            case 2: {
-                                while (true)
-                                {
-                                    system("cls");
-                                    vector<string> subjects = {"1. Operating Systems", "2. Networks", "3. Databases",
-                                                               "4. Go Back"};
-                                    cout << "\nPlease select a Major Course (multiple selection allowed, press ESC to "
-                                            "go back):\n";
-                                    for (const auto &subject : subjects)
-                                    {
-                                        cout << subject << "\n";
-                                    }
-                                    cout << "Currently selected subjects: ";
-                                    for (int subject : selectedMajorSubjects)
-                                    {
-                                        cout << subject << " ";
-                                    }
-                                    cout << "\n> ";
-                                    int subjectChoice;
-                                    cin >> subjectChoice;
-
-                                    if (checkForEsc() || subjectChoice == 4)
-                                    {
-                                        break;
-                                    }
-
-                                    if (cin.fail() || subjectChoice < 1 || subjectChoice > subjects.size() - 1)
-                                    {
-                                        cin.clear();
-                                        cin.ignore(1000, '\n');
-                                        cout << "Invalid input. Please try again." << endl;
-                                    }
-                                    else
-                                    {
-                                        if (find(selectedMajorSubjects.begin(), selectedMajorSubjects.end(),
-                                                 subjectChoice) != selectedMajorSubjects.end())
-                                        {
-                                            cout << "Subject already selected." << endl;
-                                        }
-                                        else
-                                        {
-                                            selectedMajorSubjects.push_back(subjectChoice);
-                                        }
-                                    }
-                                }
-                            }
-                            break;
-                            case 3: {
-                                while (true)
-                                {
-                                    system("cls");
-                                    vector<string> subjects = {"1. Software Engineering", "2. Computer Architecture",
-                                                               "3. Computer Vision", "4. Go Back"};
-                                    cout << "\nPlease select a Major Requirement (multiple selection allowed, press "
-                                            "ESC to go back):\n";
-                                    for (const auto &subject : subjects)
-                                    {
-                                        cout << subject << "\n";
-                                    }
-                                    cout << "Currently selected subjects: ";
-                                    for (int subject : selectedMajorRequiredSubjects)
-                                    {
-                                        cout << subject << " ";
-                                    }
-                                    cout << "\n> ";
-                                    int subjectChoice;
-                                    cin >> subjectChoice;
-
-                                    if (checkForEsc() || subjectChoice == 4)
-                                    {
-                                        break;
-                                    }
-
-                                    if (cin.fail() || subjectChoice < 1 || subjectChoice > subjects.size() - 1)
-                                    {
-                                        cin.clear();
-                                        cin.ignore(1000, '\n');
-                                        cout << "Invalid input. Please try again." << endl;
-                                    }
-                                    else
-                                    {
-                                        if (find(selectedMajorRequiredSubjects.begin(),
-                                                 selectedMajorRequiredSubjects.end(),
-                                                 subjectChoice) != selectedMajorRequiredSubjects.end())
-                                        {
-                                            cout << "Subject already selected." << endl;
-                                        }
-                                        else
-                                        {
-                                            selectedMajorRequiredSubjects.push_back(subjectChoice);
-                                        }
-                                    }
-                                }
-                            }
-                            break;
-                            }
-                        }
-                    }
-                    else if (category == 2)
-                    {
-                        vector<string> generalOptions = {"1. General Education Basics",
-                                                         "2. Core - Challenge",
-                                                         "3. Core - Creativity",
-                                                         "4. Core - Convergence",
-                                                         "5. Core - Trust",
-                                                         "6. Core - Communication",
-                                                         "7. Choice - Challenge",
-                                                         "8. Choice - Creativity",
-                                                         "9. Choice - Convergence",
-                                                         "10. Choice - Trust",
-                                                         "11. Choice - Communication",
-                                                         "12. Go Back"};
-                        while (true)
-                        {
-                            system("cls");
-                            int generalChoice;
-                            cout << "\nPlease select a general education option:\n";
-                            for (int i = 0; i < generalOptions.size(); ++i)
-                            {
-                                cout << i + 1 << ". " << generalOptions[i] << "\n";
-                            }
-                            cout << "> ";
-                            cin >> generalChoice;
-                            while (cin.fail() || generalChoice < 1 || generalChoice > generalOptions.size())
-                            {
-                                cin.clear();
-                                cin.ignore(1000, '\n');
-                                cout << "Invalid input. Please select a number between 1 and " << generalOptions.size()
-                                     << ": ";
-                                cin >> generalChoice;
-                            }
-                            if (generalChoice == 12)
-                            {
-                                break;
-                            }
-                            switch (generalChoice)
-                            {
-                            case 1: {
-                                while (true)
-                                {
-                                    system("cls");
-                                    vector<string> subjects = {"1. Philosophy", "2. Psychology", "3. Art History",
-                                                               "4. Go Back"};
-                                    cout << "\nPlease select a General Education Basics subject (multiple selection "
-                                            "allowed, press ESC to go back):\n";
-                                    for (const auto &subject : subjects)
-                                    {
-                                        cout << subject << "\n";
-                                    }
-                                    cout << "Currently selected subjects: ";
-                                    for (int subject : selectedGeneralBasicSubjects)
-                                    {
-                                        cout << subject << " ";
-                                    }
-                                    cout << "\n> ";
-                                    int subjectChoice;
-                                    cin >> subjectChoice;
-
-                                    if (checkForEsc() || subjectChoice == 4)
-                                    {
-                                        break;
-                                    }
-
-                                    if (cin.fail() || subjectChoice < 1 || subjectChoice > subjects.size() - 1)
-                                    {
-                                        cin.clear();
-                                        cin.ignore(1000, '\n');
-                                        cout << "Invalid input. Please try again." << endl;
-                                    }
-                                    else
-                                    {
-                                        if (find(selectedGeneralBasicSubjects.begin(),
-                                                 selectedGeneralBasicSubjects.end(),
-                                                 subjectChoice) != selectedGeneralBasicSubjects.end())
-                                        {
-                                            cout << "Subject already selected." << endl;
-                                        }
-                                        else
-                                        {
-                                            selectedGeneralBasicSubjects.push_back(subjectChoice);
-                                        }
-                                    }
-                                }
-                            }
-                            break;
-                            case 2: {
-                                while (true)
-                                {
-                                    system("cls");
-                                    vector<string> subjects = {"1. Entrepreneurship Introduction",
-                                                               "2. Leadership Development", "3. Public Policy",
-                                                               "4. Go Back"};
-                                    cout << "\nPlease select a Core - Challenge subject (multiple selection allowed, "
-                                            "press ESC to go back):\n";
-                                    for (const auto &subject : subjects)
-                                    {
-                                        cout << subject << "\n";
-                                    }
-                                    cout << "Currently selected subjects: ";
-                                    for (int subject : selectedCoreChallengeSubjects)
-                                    {
-                                        cout << subject << " ";
-                                    }
-                                    cout << "\n> ";
-                                    int subjectChoice;
-                                    cin >> subjectChoice;
-
-                                    if (checkForEsc() || subjectChoice == 4)
-                                    {
-                                        break;
-                                    }
-
-                                    if (cin.fail() || subjectChoice < 1 || subjectChoice > subjects.size() - 1)
-                                    {
-                                        cin.clear();
-                                        cin.ignore(1000, '\n');
-                                        cout << "Invalid input. Please try again." << endl;
-                                    }
-                                    else
-                                    {
-                                        if (find(selectedCoreChallengeSubjects.begin(),
-                                                 selectedCoreChallengeSubjects.end(),
-                                                 subjectChoice) != selectedCoreChallengeSubjects.end())
-                                        {
-                                            cout << "Subject already selected." << endl;
-                                        }
-                                        else
-                                        {
-                                            selectedCoreChallengeSubjects.push_back(subjectChoice);
-                                        }
-                                    }
-                                }
-                            }
-                            break;
-                            case 3: {
-                                // Select Core - Creativity Subjects (To be implemented)
-                            }
-                            break;
-                            }
-                        }
-                    }
-                    else if (category == 3)
-                    {
-                        cout << "Proceeding to the next step." << endl;
-                        break;
-                    }
-                }
-                break;
-            }
-            case 8: {
-                cout << "\nCase 8: Additional Information Collection." << endl;
-                int englishA = 1;
-                vector<string> options = {"1. Yes", "2. No"};
-                while (true)
-                {
-                    system("cls");
-                    cout << "\nWould you like to select the English A course?\n";
-                    for (int i = 0; i < options.size(); ++i)
-                    {
-                        if (i + 1 == englishA)
-                        {
-                            cout << "> " << options[i] << endl;
-                        }
-                        else
-                        {
-                            cout << "  " << options[i] << endl;
-                        }
-                    }
-
-                    char key = _getch();
-                    if (key == 13)
-                    {
-                        break;
-                    }
-                    else if (key == 72)
-                    {
-                        englishA = (englishA == 1) ? options.size() : englishA - 1;
-                    }
-                    else if (key == 80)
-                    {
-                        englishA = (englishA == options.size()) ? 1 : englishA + 1;
-                    }
-                }
-            }
-            break;
-            case 9: {
-                cout << "\nCase 9: Schedule Verification." << endl;
-                vector<Weekday> selectedDays;
-                vector<int> selectedPeriods;
-
-                while (true)
-                {
-                    system("cls");
-                    cout << "\nPlease set your free days:\n1. Mon\n2. Tue\n3. Wed\n4. Thu\n5. Fri\n0. Done\n ";
-                    cout << "\nCurrently selected days: ";
-                    for (const auto &day : selectedDays)
-                    {
-                        cout << static_cast<int>(day) + 1 << " ";
-                    }
-                    cout << "\n> ";
-
-                    int day;
-                    cin >> day;
-                    if (day == 0)
-                    {
-                        break;
-                    }
-                    while (cin.fail() || day < 1 || day > 5 ||
-                           find(selectedDays.begin(), selectedDays.end(), static_cast<Weekday>(day - 1)) !=
-                               selectedDays.end())
-                    {
-                        cin.clear();
-                        cin.ignore(1000, '\n');
-                        cout << "Duplicate selection. Please choose a different number: ";
-                        cin >> day;
-                    }
-                    selectedDays.push_back(static_cast<Weekday>(day - 1));
-                }
-
-                while (true)
-                {
-                    system("cls");
-                    cout << "\nPlease set your free periods:\n1. Period 1\n2. Period 2\n3. Period 3\n4. Period 4\n5. "
-                            "Period 5\n6. Period 6\n7. Period 7\n8. Period 8\n9. Period 9\n10. Period 10\n11. Period "
-                            "11\n12. Period 12\n0. Done\n ";
-                    cout << "\nCurrently selected periods: ";
-                    for (const auto &period : selectedPeriods)
-                    {
-                        cout << period << " ";
-                    }
-                    cout << "\n> ";
-
-                    int period;
-                    cin >> period;
-                    if (period == 0)
-                    {
-                        break;
-                    }
-                    while (cin.fail() || period < 1 || period > 12 ||
-                           find(selectedPeriods.begin(), selectedPeriods.end(), period) != selectedPeriods.end())
-                    {
-                        cin.clear();
-                        cin.ignore(1000, '\n');
-                        cout << "Duplicate selection. Please choose a different number: ";
-                        cin >> period;
-                    }
-                    selectedPeriods.push_back(period);
-                }
-            }
-            break;
-            case 10: {
-                cout << "\nCase 10: Final Confirmation." << endl;
-                int scheduleID = rand() % 9000 + 1000;
-                cout << "\nSaving the schedule...\n";
-                cout << "The schedule has been saved. Schedule ID: " << scheduleID << endl;
-            }
-            break;
-            default:
-                cout << "Invalid step." << endl;
-                break;
-            }
-            currentStep++;
-        }
-        catch (const runtime_error &e)
-        {
-            cout << "An error occurred: " << e.what() << endl;
-        }
-    }
-}
-
-void modifySchedule()
-{
-    try
-    {
-        system("cls");
-        cout << "\nSearch and Modify Schedule" << endl;
-        cout << "Enter the necessary information to view the schedules to search." << endl;
-
-        string userName = getInput("User Name (leave blank for all searches): ");
-        int year = getOptionalIntInput("Year (1-4, leave blank for all searches): ", 1, 4);
-        Semester semester = getOptionalSemesterInput(
-            "Semester (1: Spring, 2: Summer, 3: Fall, 4: Winter, leave blank for all searches): ");
-        int scheduleID = getOptionalIntInput("Schedule ID (leave blank for all searches): ", 0, 9999);
-
-        vector<Table> foundSchedules =
-            tableDatabase.query({to_string(scheduleID), semester, year == -1 ? "" : to_string(year), "", userName});
-
-        if (foundSchedules.empty())
-        {
-            cout << "No schedules found matching the criteria. Please try again." << endl;
-            waitForEnterOrEsc();
-            return;
-        }
-
-        cout << "\nList of Found Schedules:" << endl;
-        for (size_t i = 0; i < foundSchedules.size(); ++i)
-        {
-            cout << i + 1 << ") Schedule ID: " << foundSchedules[i].get_id()
-                 << ", Year: " << foundSchedules[i].get_year()
-                 << ", Semester: " << encode_semester(foundSchedules[i].get_semester())
-                 << ", User Name: " << foundSchedules[i].get_user_id() << endl;
-        }
-
-        int selectedScheduleIndex =
-            getOptionalIntInput("Select a schedule to modify (number): ", 1, foundSchedules.size()) - 1;
-        modifySelectedSchedule(foundSchedules[selectedScheduleIndex].get_id());
-    }
-    catch (runtime_error &)
-    {
-        cout << "Schedule modification cancelled." << endl;
-    }
-}
-
-string getInput(const string &prompt)
-{
-    cout << prompt;
-    string input;
-    getline(cin, input);
-    return input;
-}
-
-int getOptionalIntInput(const string &prompt, int min, int max)
-{
-    string input = getInput(prompt);
-    if (input.empty())
-    {
-        return -1;
-    }
-    try
-    {
-        int value = stoi(input);
-        if (value >= min && value <= max)
-        {
-            return value;
-        }
-        else
-        {
-            cout << "Input value is out of range." << endl;
-            return getOptionalIntInput(prompt, min, max);
-        }
-    }
-    catch (...)
-    {
-        cout << "Please enter a valid number." << endl;
-        return getOptionalIntInput(prompt, min, max);
-    }
-}
-
-Semester getOptionalSemesterInput(const string &prompt)
-{
-    string input = getInput(prompt);
-    if (input.empty())
-    {
-        return static_cast<Semester>(-1);
-    }
-    try
-    {
-        int value = stoi(input);
-        if (value >= 1 && value <= 4)
-        {
-            return static_cast<Semester>(value - 1);
-        }
-        else
-        {
-            cout << "Please enter a valid semester." << endl;
-            return getOptionalSemesterInput(prompt);
-        }
-    }
-    catch (...)
-    {
-        cout << "Please enter a valid semester." << endl;
-        return getOptionalSemesterInput(prompt);
-    }
-}
-
-void modifySelectedSchedule(int scheduleID)
-{
-    Table *selectedSchedule = &tableDatabase.get_tables()[scheduleID - 1];
-    if (!selectedSchedule)
-    {
-        cout << "Schedule not found." << endl;
-        return;
-    }
-    displayLectureList(*selectedSchedule);
-
-    int editChoice = 1;
-
-    cout << " \n1. Set as Main Schedule\n2. Delete Schedule\n3. Modify Schedule\n4. Return to Menu " << endl;
-    cin >> editChoice;
-
-    switch (editChoice)
-    {
-    case 1:
-        // setMainSchedule(scheduleID);
-        cout << "Set as main schedule." << endl;
-        break;
-    case 2:
-        deleteSchedule(scheduleID);
-        break;
-    case 3:
-        modifyExistingSchedule(*selectedSchedule);
-        break;
-    case 4:
-        return;
-    default:
-        cout << "Invalid input." << endl;
-        break;
-    }
-}
-
-void deleteSchedule(int scheduleID)
-{
-    try
-    {
-        tableDatabase.remove(scheduleID);
-        cout << "Schedule has been deleted." << endl;
-    }
-    catch (const std::exception &e)
-    {
-        cout << "Failed to delete schedule: " << e.what() << endl;
-    }
-    waitForEnterOrEsc();
-}
-
-void modifyExistingSchedule(Table &selectedSchedule)
-{
-    while (true)
-    {
-        int modifyChoice = 1;
-        cout << "\n1. Add Lecture\n2. Delete Lecture\n3. Exit" << endl;
-        cin >> modifyChoice;
-
-        switch (modifyChoice)
+        switch (choice)
         {
         case 1:
-            addLectureToSchedule(selectedSchedule);
+            system("cls");
+            setupUser(currentUser);
             break;
         case 2:
-            deleteLectureFromSchedule(selectedSchedule);
+            system("cls");
+            createSchedule(currentUser, schedules);
             break;
         case 3:
+            system("cls");
+            searchAndModifySchedule();
+            break;
+        case 4:
+            system("cls");
+            cout << "Exiting the program." << endl;
             return;
         default:
-            cout << "Invalid input." << endl;
-            break;
+            cout << "Please select a valid option." << endl;
         }
     }
-}
-
-void addLectureToSchedule(Table &schedule)
-{
-    cout << "Enter the lecture information to add." << endl;
-    string lectureName = getInput("Lecture Name: ");
-    string professorName = getInput("Professor Name: ");
-    int credits = getOptionalIntInput("Credits (1-5): ", 1, 5);
-    int lectureDay =
-        getOptionalIntInput("Lecture Day (1: Monday, 2: Tuesday, 3: Wednesday, 4: Thursday, 5: Friday): ", 1, 5);
-    int lecturePeriod = getOptionalIntInput("Lecture Period (1-12): ", 1, 12);
-
-    vector<CourseTime> times = {CourseTime{static_cast<Weekday>(lectureDay - 1), lecturePeriod}};
-    string encodedCourseInfo = lectureName + "|" + professorName + "|" + to_string(credits);
-    Course newCourse(encodedCourseInfo);
-
-    if (isLectureAlreadyAdded(schedule, newCourse))
-    {
-        cout << "The lecture is already added." << endl;
-    }
-    else if (isTimeConflict(schedule, newCourse))
-    {
-        cout << "There is a time conflict in the schedule." << endl;
-    }
-    else
-    {
-        schedule.insert_course(newCourse);
-        cout << "Lecture added successfully." << endl;
-    }
-    waitForEnterOrEsc();
-}
-
-bool isLectureAlreadyAdded(const Table &schedule, const Course &newCourse)
-{
-    for (const auto &course : schedule.get_course())
-    {
-        if (course.get_name() == newCourse.get_name() && course.get_professor() == newCourse.get_professor())
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool isTimeConflict(const Table &schedule, const Course &newCourse)
-{
-    for (const auto &course : schedule.get_course())
-    {
-        for (const auto &newTime : newCourse.get_times())
-        {
-            for (const auto &existingTime : course.get_times())
-            {
-                if (newTime.weekday == existingTime.weekday && newTime.time == existingTime.time)
-                {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
-void deleteLectureFromSchedule(Table &schedule)
-{
-    cout << "Enter the name of the lecture to delete." << endl;
-    string lectureName = getInput("Lecture Name: ");
-    Course *course = nullptr;
-    for (Course &c : schedule.get_course())
-    {
-        if (c.get_name() == lectureName)
-        {
-            course = &c;
-            break;
-        }
-    }
-    if (!course)
-    {
-        cout << "Lecture not found." << endl;
-    }
-    else
-    {
-        schedule.remove_course(*course);
-        cout << "Lecture deleted successfully." << endl;
-    }
-    waitForEnterOrEsc();
-}
-
-void displayLectureList(const Table &table)
-{
-    cout << "\nCurrent lecture list of the selected schedule (ID: " << table.get_id() << "):" << endl;
-    cout << "No. | Lecture Name   | Professor   | Credits | Day/Period" << endl;
-    cout << "-----------------------------------------------------------------" << endl;
-    const auto &courses = table.get_course();
-    for (size_t i = 0; i < courses.size(); ++i)
-    {
-        const Course &course = courses[i];
-        cout << setw(4) << (i + 1) << " | " << setw(12) << course.get_name() << " | " << setw(10)
-             << course.get_professor() << " | " << setw(4) << course.get_grade() << " | ";
-        for (const auto &time : course.get_times())
-        {
-            cout << encode_weekday(time.weekday) << "/" << time.time << "  ";
-        }
-        cout << endl;
-    }
-    waitForEnterOrEsc();
 }
