@@ -9,9 +9,13 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 using namespace std;
+
+// 전방 선언 (forward declaration)
+struct Schedule;
 
 // 사용자 정보 구조체
 struct User
@@ -22,9 +26,13 @@ struct User
     string department;
 };
 
-// 전역 사용자 및 시간표 데이터
+// 전역 사용자 및 시간표 데이터 (선언만)
 extern User currentUser;
-extern vector<class Schedule *> schedules;
+extern vector<Schedule *> schedules;       // 사용자 시간표 목록
+extern vector<string> selectedProfessors;  // 사용자 선택 교수 목록
+extern bool isEnglishA;                    // 사용자 영어 A 과목 여부
+extern int maxCredits;                     // 사용자 최대 학점
+extern unordered_set<string> selectedDays; // 사용자 선택 요일 목록
 
 // Schedule 구조체 정의
 struct Schedule

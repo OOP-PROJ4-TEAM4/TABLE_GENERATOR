@@ -2,6 +2,7 @@
 #include "course_db.h"
 #include <algorithm>
 #include <iostream>
+#include <unordered_set>
 
 using namespace std;
 
@@ -46,24 +47,40 @@ void Schedule::removeDay(int index)
 
 void Schedule::display()
 {
-    cout << "=====================================================================================================================================\n";
-    cout << "      Mon        |        Tue       |        Wed       |        Thu       |        Fri       |        Sat       |        Sun "
-         << endl;
+    cout << "===========================================================\n";
+    vector<string> daysOfWeek = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
     vector<vector<string>> scheduleTable(7);
+    unordered_set<string> addedCourses;
+
     for (const auto &course : courses)
     {
-        // Add courses by day (in actual implementation, proper day info is needed)
-        scheduleTable[0].push_back(course); // Assigned to Monday as an example
-    }
-    for (int i = 0; i < 7; ++i)
-    {
-        cout << "\n";
-        for (const auto &course : scheduleTable[i])
+        for (const auto &courseObj : courseDb.query({}))
         {
-            cout << course << "    | ";
+            if (courseObj.get_name() == course && addedCourses.find(course) == addedCourses.end())
+            {
+                for (const auto &courseTime : courseObj.get_times())
+                {
+                    int dayIndex = static_cast<int>(courseTime.weekday);
+                    if (find(days.begin(), days.end(), daysOfWeek[dayIndex]) == days.end())
+                    {
+                        scheduleTable[dayIndex].push_back(course);
+                    }
+                }
+                addedCourses.insert(course);
+            }
         }
     }
-    cout << "\n=======================================================================================================" << endl;
+
+    for (int i = 0; i < 7; ++i)
+    {
+        cout << daysOfWeek[i] << " | ";
+        for (const auto &course : scheduleTable[i])
+        {
+            cout << course << " | ";
+        }
+        cout << "\n";
+    }
+    cout << "===========================================================\n";
 }
 
 // Function definitions
@@ -75,7 +92,6 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
     vector<string> selectedCourses;
     bool isEnglishA;
     vector<string> avoidDays;
-    string day;
 
     system("cls");
     // Load course data from the database
@@ -173,25 +189,14 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
     department = departmentList[departmentChoice - 1];
 
     system("cls");
-    // Select course category
-    vector<string> courseCategories = {
-        "General_Education",     // 공통교양
-        "CoreCommunication",     // 핵심-소통
-        "CoreCreativity",        // 핵심-창의
-        "CoreChallenge",         // 핵심-도전
-        "CoreConvergence",       // 핵심-융합
-        "CoreTrust",             // 핵심-신뢰
-        "ElectiveCommunication", // 선택-소통
-        "ElectiveCreativity",    // 선택-창의
-        "ElectiveChallenge",     // 선택-도전
-        "ElectiveConvergence",   // 선택-융합
-        "ElectiveTrust",         // 선택-신뢰
-        "Major",                 // 전공
-        "MajorRequired",         // 전공필수
-        "MajorFundamental",      // 전공기초
-        "Next Step"              // 다음 단계
-    };
+    // Select course categories
+    vector<string> courseCategories = {"General_Education",     "CoreCommunication",  "CoreCreativity",
+                                       "CoreChallenge",         "CoreConvergence",    "CoreTrust",
+                                       "ElectiveCommunication", "ElectiveCreativity", "ElectiveChallenge",
+                                       "ElectiveConvergence",   "ElectiveTrust",      "Major",
+                                       "MajorRequired",         "MajorFundamental",   "Next Step"};
 
+    unordered_set<string> addedCourses;
     while (true)
     {
         system("cls");
@@ -201,6 +206,7 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
         {
             cout << idx++ << ". " << category << endl;
         }
+        cout << "Select: ";
         int categoryChoice;
         cin >> categoryChoice;
         cin.ignore(); // Clear input buffer
@@ -218,14 +224,19 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
         CourseType selectedCategory = static_cast<CourseType>(categoryChoice - 1);
         system("cls");
         // Select course
-        cout << "Select a course: " << endl;
+        cout << "Select courses for category " << courseCategories[categoryChoice - 1]
+             << " (you can select multiple): " << endl;
         vector<Course> categoryCourses;
+        unordered_set<string> uniqueCourseNames;
         for (const auto &course : courses)
         {
             if (course.get_type() == selectedCategory &&
-                encode_department(*course.get_departments().begin()) == department)
+                encode_department(*course.get_departments().begin()) == department &&
+                addedCourses.find(course.get_name()) == addedCourses.end() &&
+                uniqueCourseNames.find(course.get_name()) == uniqueCourseNames.end())
             {
                 categoryCourses.push_back(course);
+                uniqueCourseNames.insert(course.get_name());
                 cout << categoryCourses.size() << ". " << course.get_name() << endl;
             }
         }
@@ -239,35 +250,23 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
         int courseChoice;
         while (true)
         {
+            cout << "> ";
             cin >> courseChoice;
             cin.ignore(); // Clear input buffer
-            if (courseChoice >= 1 && courseChoice <= categoryCourses.size())
+            if (courseChoice == 0)
             {
                 break;
+            }
+            if (courseChoice >= 1 && courseChoice <= categoryCourses.size())
+            {
+                Course selectedCourse = categoryCourses[courseChoice - 1];
+                selectedCourses.push_back(selectedCourse.get_name());
+                addedCourses.insert(selectedCourse.get_name());
             }
             else
             {
                 cout << "Invalid choice. Please select a valid course number." << endl;
             }
-        }
-        Course selectedCourse = categoryCourses[courseChoice - 1];
-        selectedCourses.push_back(selectedCourse.get_name());
-    }
-
-    system("cls");
-    // Choose if it's an English A course
-    cout << "Is this an English A course? (1: Yes, 0: No): ";
-    while (true)
-    {
-        cin >> isEnglishA;
-        cin.ignore(); // Clear input buffer
-        if (isEnglishA == 0 || isEnglishA == 1)
-        {
-            break;
-        }
-        else
-        {
-            cout << "Invalid choice. Please enter 1 for Yes or 0 for No." << endl;
         }
     }
 
@@ -297,7 +296,6 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
     }
     cin.ignore(); // Clear input buffer
 
-
     system("cls");
     cout << "Creating a new schedule...";
     // Create a new schedule with a random ID
@@ -306,12 +304,19 @@ void createSchedule(User &currentUser, vector<Schedule *> &schedules)
     {
         schedule->addCourse(course);
     }
+    for (const auto &day : avoidDays)
+    {
+        schedule->addDay(day);
+    }
     schedules.push_back(schedule);
     cout << "Schedule created. ID: " << schedule->id << endl;
     schedule->display();
     cout << "Press Enter to return to the main menu...";
     cin.ignore();
 }
+
+
+
 
 
 void searchAndModifySchedule()
