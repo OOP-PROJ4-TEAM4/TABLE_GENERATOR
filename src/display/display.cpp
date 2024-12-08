@@ -120,6 +120,7 @@ void Display::createSchedule()
     // 교수 설정
     std::vector<std::string> professor_list = {};
     std::set<std::string> professor_set = {};
+
     for (const auto &course : courses)
     {
         if (professor_set.count(course.get_professor()) == 0)
@@ -128,6 +129,10 @@ void Display::createSchedule()
             professor_set.insert(course.get_professor());
         }
     }
+
+    professor_list[0] = "손봉수";
+
+
     std::vector<std::string> selected_professors = {};
     selected_professors = select_multiple(
         professor_list, [](std::string item) { return item; }, 10,
